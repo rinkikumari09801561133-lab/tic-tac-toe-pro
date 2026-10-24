@@ -1,0 +1,6 @@
+{
+  "name": "Tic Tac Toe Pro",
+  "description": "Ultimate XO Battle - Premium Tic Tac Toe game with intelligent AI, customizable neon themes, XP progression, daily challenges, and achievements.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
