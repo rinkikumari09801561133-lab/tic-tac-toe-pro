@@ -2680,6 +2680,11 @@
           Confetti.launch();
         }
 
+        // Notify native Android bridge of Game Over for Interstitial Ad
+        if (window.AndroidBridge && typeof window.AndroidBridge.onGameOver === 'function') {
+          try { window.AndroidBridge.onGameOver(); } catch (e) { console.error(e); }
+        }
+
         // Show Modal Dialog
         setTimeout(() => {
           showResultModal(outcome, xpGained, coinsGained);
@@ -2739,6 +2744,11 @@
         if (target) {
           target.classList.add('active');
           target.scrollTop = 0;
+        }
+
+        // Notify native Android bridge for screen tracking (e.g. Native Ad display)
+        if (window.AndroidBridge && typeof window.AndroidBridge.onScreenChanged === 'function') {
+          try { window.AndroidBridge.onScreenChanged(screenId); } catch (e) { console.error(e); }
         }
 
         // Update Bottom Nav state
