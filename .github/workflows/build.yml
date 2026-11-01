@@ -49,10 +49,8 @@ jobs:
           mkdir -p app/src/debug
           if [ -n "$GOOGLE_SERVICES_JSON" ]; then
             echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
-            echo "Using real GOOGLE_SERVICES_JSON from secrets"
           else
-            echo '{"project_info":{"project_number":"123456789","project_id":"tic-tac-toe-pro-dummy","storage_bucket":"dummy.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:123456789:android:abcdef","android_client_info":{"package_name":"com.example.tic_tac_toe_pro"}},"oauth_client":[],"api_key":[{"current_key":"dummy-key"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}' > app/google-services.json
-            echo "Using dummy google-services.json for build"
+            echo '{"project_info":{"project_number":"123456789","project_id":"dummy","storage_bucket":"dummy.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:123:android:abc","android_client_info":{"package_name":"com.example"}},"oauth_client":[],"api_key":[{"current_key":"dummy"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}' > app/google-services.json
           fi
           cp app/google-services.json app/src/main/google-services.json || true
           cp app/google-services.json app/src/release/google-services.json || true
@@ -73,10 +71,8 @@ jobs:
             echo "keyPassword=${KEY_PASSWORD}" >> app/key.properties
             echo "keyAlias=${KEY_ALIAS}" >> app/key.properties
             echo "storeFile=my-upload-key.jks" >> app/key.properties
-            echo "Using keystore from secrets"
           else
-            echo "No secrets found, generating new keystore..."
-            rm -f app/my-upload-key.jks *.jks **/*.jks
+            rm -f app/my-upload-key.jks
             keytool -genkey -v -keystore app/my-upload-key.jks -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 -alias upload -storepass myStorePass123 -keypass myKeyPass123 -dname "CN=Test, OU=Test, O=Test, L=Patna, S=Bihar, C=IN"
             echo "storePassword=myStorePass123" > app/key.properties
             echo "keyPassword=myKeyPass123" >> app/key.properties
@@ -84,12 +80,27 @@ jobs:
             echo "storeFile=my-upload-key.jks" >> app/key.properties
           fi
           cat app/key.properties
-          ls -lh app/*.jks || true
 
       - name: Build Release APK
         run: |
-          chmod +x app/gradlew
-          ./app/gradlew :app:assembleRelease --stacktrace
+          echo "Finding gradlew..."
+          find . -maxdepth 4 -name "gradlew" -type f
+          if [ -f ./gradlew ]; then
+            chmod +x ./gradlew
+            ./gradlew :app:assembleRelease --stacktrace
+          elif [ -f ./app/gradlew ]; then
+            chmod +x ./app/gradlew
+            ./app/gradlew :app:assembleRelease --stacktrace
+          elif [ -f ./android/gradlew ]; then
+            cd android
+            chmod +x ./gradlew
+            ./gradlew :app:assembleRelease --stacktrace
+          else
+            echo "gradlew not found in any location"
+            ls -la
+            ls -la app/ || true
+            exit 1
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
