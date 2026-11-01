@@ -1,5 +1,9 @@
 name: Build APK
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -17,10 +21,10 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Generate debug keystore if missing
+      - name: Generate release keystore if missing
         run: |
-          if [ ! -f debug.keystore ]; then
-            keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          if [ ! -f app/release.keystore ]; then
+            keytool -genkey -v -keystore app/release.keystore -alias release -keyalg RSA -keysize 2048 -validity 10000 -storepass tictactoe123 -keypass tictactoe123 -dname "CN=Tic Tac Toe Pro, OU=Games, O=Tic Tac Toe, L=Gopalganj, ST=Bihar, C=IN"
           fi
 
       - name: Build Web if package.json exists
@@ -34,13 +38,13 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
 
       - name: Make gradlew executable
-        run: chmod +x gradlew
+        run: chmod +x ./gradlew
 
-      - name: Assemble Debug APK
-        run: ./gradlew assembleDebug --no-daemon
+      - name: Assemble Release APK
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: TicTacToe-APK
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/release/*.apk
