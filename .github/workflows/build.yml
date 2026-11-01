@@ -1,4 +1,5 @@
-name: Build APK
+name: Build APK (100% Safe Debug Build)
+
 on:
   push:
     branches: [ main ]
@@ -7,46 +8,64 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - uses: actions/setup-node@v4
+
+      - name: Set up Node (optional)
+        if: ${{ hashFiles('package.json') != '' || hashFiles('app/package.json') != '' }}
+        uses: actions/setup-node@v4
         with:
           node-version: 20
-      - uses: gradle/actions/setup-gradle@v4
 
-      - name: Install Web Dependencies
+      - name: Install Web Dependencies (if any)
         run: |
-          if [ -f package.json ]; then npm ci; npm run build || true; fi
-          if [ -f app/package.json ]; then cd app; npm ci; npm run build || true; fi
+          if [ -f package.json ]; then npm install --no-audit --no-fund || true; npm run build || true; fi
+          if [ -f app/package.json ]; then cd app && npm install --no-audit --no-fund || true; npm run build || true; fi
 
-      - name: Setup Firebase
+      - name: Ensure google-services.json exists
         run: |
           mkdir -p app/src/main
-          echo '{"project_info":{"project_number":"123","project_id":"dummy","storage_bucket":"dummy.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:123:android:abc","android_client_info":{"package_name":"com.example"}},"oauth_client":[],"api_key":[{"current_key":"dummy"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}' > app/google-services.json
-          cp app/google-services.json app/src/main/google-services.json || true
+          if [ ! -f app/google-services.json ]; then
+            echo '{"project_info":{"project_number":"123","project_id":"dummy","storage_bucket":"dummy.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:123:android:abc","android_client_info":{"package_name":"com.example"}},"oauth_client":[],"api_key":[{"current_key":"dummy"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}' > app/google-services.json
+          fi
+          cp -f app/google-services.json app/src/main/google-services.json || true
 
-      - name: Setup Keystore
-        run: |
-          rm -f my-upload-key.jks app/my-upload-key.jks
-          keytool -genkey -v -keystore my-upload-key.jks -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 -alias upload -storepass myStorePass123 -keypass myKeyPass123 -dname "CN=Test, OU=Test, O=Test, L=Patna, S=Bihar, C=IN"
-          cp my-upload-key.jks app/my-upload-key.jks
-          PWD_PATH=$(pwd)
-          echo "storeFile=$PWD_PATH/my-upload-key.jks" > app/key.properties
-          echo "storePassword=myStorePass123" >> app/key.properties
-          echo "keyPassword=myKeyPass123" >> app/key.properties
-          echo "keyAlias=upload" >> app/key.properties
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
-      - name: Build Release APK
+      - name: Make gradlew executable
         run: |
-          chmod +x ./gradlew || true
-          ./gradlew clean :app:assembleRelease --no-configuration-cache --stacktrace
+          if [ -f ./gradlew ]; then chmod +x ./gradlew; echo "gradlew found"; else echo "no gradlew - will use system gradle"; fi
+
+      - name: Build Debug APK
+        run: |
+          if [ -f ./gradlew ]; then
+            ./gradlew :app:assembleDebug --no-daemon --stacktrace
+          else
+            gradle :app:assembleDebug --no-daemon --stacktrace
+          fi
+
+      - name: Find and copy APK
+        run: |
+          echo "----- APK files found -----"
+          find . -name "*.apk" -type f | tee apk-list.txt
+          mkdir -p out
+          find . -name "*.apk" -type f -exec cp {} out/ \;
+          ls -la out
 
       - name: Upload APK
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: TicTacToe-Pro-APK
-          path: app/build/outputs/apk/release/*.apk
+          name: CityRunner3D-APK
+          path: out/*.apk
+          if-no-files-found: warn
+          
