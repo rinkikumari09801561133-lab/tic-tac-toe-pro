@@ -43,10 +43,7 @@ jobs:
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
-          mkdir -p app
-          mkdir -p app/src/main
-          mkdir -p app/src/release
-          mkdir -p app/src/debug
+          mkdir -p app/src/main app/src/release app/src/debug
           if [ -n "$GOOGLE_SERVICES_JSON" ]; then
             echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
           else
@@ -64,26 +61,34 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
+          pwd
+          ls -la
           mkdir -p app
+          # Clean old
+          rm -f my-upload-key.jks app/my-upload-key.jks app/release.jks
+          
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 --decode > app/my-upload-key.jks
-            echo "storePassword=${STORE_PASSWORD}" > app/key.properties
-            echo "keyPassword=${KEY_PASSWORD}" >> app/key.properties
-            echo "keyAlias=${KEY_ALIAS}" >> app/key.properties
-            echo "storeFile=my-upload-key.jks" >> app/key.properties
+            echo "$KEYSTORE_BASE64" | base64 --decode > my-upload-key.jks
           else
-            rm -f app/my-upload-key.jks
-            keytool -genkey -v -keystore app/my-upload-key.jks -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 -alias upload -storepass myStorePass123 -keypass myKeyPass123 -dname "CN=Test, OU=Test, O=Test, L=Patna, S=Bihar, C=IN"
-            echo "storePassword=myStorePass123" > app/key.properties
-            echo "keyPassword=myKeyPass123" >> app/key.properties
-            echo "keyAlias=upload" >> app/key.properties
-            echo "storeFile=my-upload-key.jks" >> app/key.properties
+            keytool -genkey -v -keystore my-upload-key.jks -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 -alias upload -storepass myStorePass123 -keypass myKeyPass123 -dname "CN=Test, OU=Test, O=Test, L=Patna, S=Bihar, C=IN"
           fi
+          
+          # Copy to everywhere gradle might look
+          cp my-upload-key.jks app/my-upload-key.jks
+          cp my-upload-key.jks app/release.jks || true
+          
+          # Create key.properties with ABSOLUTE PATH - This is the fix
+          PWD_PATH=$(pwd)
+          echo "storeFile=$PWD_PATH/my-upload-key.jks" > app/key.properties
+          echo "storePassword=${STORE_PASSWORD:-myStorePass123}" >> app/key.properties
+          echo "keyPassword=${KEY_PASSWORD:-myKeyPass123}" >> app/key.properties
+          echo "keyAlias=${KEY_ALIAS:-upload}" >> app/key.properties
+          
           cat app/key.properties
+          ls -lh my-upload-key.jks app/my-upload-key.jks
 
       - name: Build Release APK
         run: |
-          echo "Finding gradlew..."
           find . -maxdepth 4 -name "gradlew" -type f
           if [ -f ./gradlew ]; then
             chmod +x ./gradlew
@@ -92,19 +97,17 @@ jobs:
             chmod +x ./app/gradlew
             ./app/gradlew :app:assembleRelease --stacktrace
           elif [ -f ./android/gradlew ]; then
-            cd android
-            chmod +x ./gradlew
-            ./gradlew :app:assembleRelease --stacktrace
+            cd android && chmod +x ./gradlew && ./gradlew :app:assembleRelease --stacktrace
           else
-            echo "gradlew not found in any location"
-            ls -la
-            ls -la app/ || true
-            exit 1
+            echo "gradlew not found"; ls -la; exit 1
           fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: TicTacToe-Pro-APK
-          path: app/build/outputs/apk/release/*.apk
+          path: |
+            app/build/outputs/apk/release/*.apk
+            build/outputs/apk/release/*.apk
+            app/build/outputs/bundle/release/*.aab
           if-no-files-found: error
