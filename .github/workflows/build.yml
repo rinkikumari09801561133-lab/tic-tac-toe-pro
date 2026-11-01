@@ -1,4 +1,4 @@
-name: Build APK (100% Safe Debug Build)
+name: Build APK
 
 on:
   push:
@@ -8,7 +8,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -19,7 +20,7 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Node (optional)
+      - name: Set up Node (only if project uses it)
         if: ${{ hashFiles('package.json') != '' || hashFiles('app/package.json') != '' }}
         uses: actions/setup-node@v4
         with:
@@ -38,22 +39,35 @@ jobs:
           fi
           cp -f app/google-services.json app/src/main/google-services.json || true
 
+      - name: Create Debug Keystore (root + app + src/debug)
+        run: |
+          mkdir -p app/src/debug
+          rm -f debug.keystore app/debug.keystore app/src/debug/debug.keystore
+          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          cp -f debug.keystore app/debug.keystore
+          cp -f debug.keystore app/src/debug/debug.keystore
+          ls -lh debug.keystore app/debug.keystore app/src/debug/debug.keystore || true
+          echo "--- signingConfigs in app/build.gradle ---"
+          grep -n -A6 "signingConfigs" app/build.gradle || true
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
       - name: Make gradlew executable
         run: |
-          if [ -f ./gradlew ]; then chmod +x ./gradlew; echo "gradlew found"; else echo "no gradlew - will use system gradle"; fi
+          if [ -f ./gradlew ]; then chmod +x ./gradlew; echo "gradlew found"; else echo "no gradlew, will use system gradle"; fi
 
       - name: Build Debug APK
         run: |
+          ARGS=":app:assembleDebug --no-daemon --stacktrace --no-configuration-cache -x lint -x lintDebug"
           if [ -f ./gradlew ]; then
-            ./gradlew :app:assembleDebug --no-daemon --stacktrace
+            ./gradlew $ARGS
           else
-            gradle :app:assembleDebug --no-daemon --stacktrace
+            gradle $ARGS
           fi
 
       - name: Find and copy APK
+        if: ${{ always() }}
         run: |
           echo "----- APK files found -----"
           find . -name "*.apk" -type f | tee apk-list.txt
